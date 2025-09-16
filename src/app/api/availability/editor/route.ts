@@ -1,47 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { sellerId, availability } = body
+    const { searchParams } = new URL(request.url)
+    const sellerId = searchParams.get('sellerId')
 
-    if (!sellerId || !availability) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!sellerId) {
+      return NextResponse.json({ error: 'sellerId is required' }, { status: 400 })
     }
-
-    // For simplicity, store availability as JSON in a separate table or in users table (extend schema if needed)
-    // Here, assuming a new table 'seller_availability' with columns: seller_id (UUID), availability (JSONB), updated_at (timestamp)
-
-    const { data, error } = await supabase
-      .from('seller_availability')
-      .upsert(
-        {
-          seller_id: sellerId,
-          availability,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'seller_id' }
-      )
-      .select()
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ message: 'Availability saved', availability: data })
-  } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Failed to save availability' }, { status: 500 })
-  }
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { sellerId: string } }
-) {
-  try {
-    const { sellerId } = params
 
     const { data, error } = await supabase
       .from('seller_availability')
@@ -49,13 +16,45 @@ export async function GET(
       .eq('seller_id', sellerId)
       .single()
 
-    if (error) {
-      return NextResponse.json({ error: 'Availability not found' }, { status: 404 })
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ availability: data.availability })
+    const availability = data?.availability || {}
+    return NextResponse.json({ availability })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { sellerId, schedule } = body
+
+    if (!sellerId || !schedule) {
+      return NextResponse.json({ error: 'sellerId and schedule are required' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('seller_availability')
+      .upsert(
+        {
+          seller_id: sellerId,
+          availability: schedule,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'seller_id' }
+      )
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ message: 'Availability saved successfully' })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -74,6 +74,9 @@ export default function SellerDashboard() {
   const [availability, setAvailability] = useState<AvailabilitySchedule>(initialAvailability);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
+  // --- NEW: State for notification ---
+  const [showNotification, setShowNotification] = useState(false);
+
 
   // Fix TypeScript errors for session properties
   const refreshToken = (session as any)?.refreshToken
@@ -189,8 +192,6 @@ export default function SellerDashboard() {
       </div>
     )
   }
-
-  const [showNotification, setShowNotification] = useState(false);
 
   // Show notification on successful save
   useEffect(() => {

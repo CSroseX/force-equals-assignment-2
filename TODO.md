@@ -1,0 +1,7 @@
+- [ ] Update Seller interface to include 'online' boolean property
+- [ ] Add 4 mock sellers in component state, one marked as online
+- [ ] Remove fetch to /api/sellers
+- [ ] Adjust UI to show all sellers but only allow selection for the online seller
+- [ ] Test the buyer page to verify mock sellers appear
+- [ ] Verify only the online seller is selectable and shows availability
+- [ ] Verify booking flow works for the online seller

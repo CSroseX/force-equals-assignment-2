@@ -9,12 +9,18 @@ interface Seller {
   name: string
   email: string
   image?: string
+  online: boolean
 }
 
 interface BusyTime {
   start: string
   end: string
 }
+
+interface AvailabilitySchedule {
+    [key: string]: { start: string; end: string }[];
+}
+
 
 // --- Reusable Icon & Loading Components ---
 const GoogleIcon = () => (
@@ -24,7 +30,7 @@ const LogoutIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
 );
 const ClockIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
 );
 const SearchIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -40,97 +46,92 @@ export default function BuyerPage() {
   const { data: session, status } = useSession()
   
   // State Management
-  const [sellers, setSellers] = useState<Seller[]>([])
-  const [searchQuery, setSearchQuery] = useState(''); // New state for search
+  const [sellers, setSellers] = useState<Seller[]>([
+    { id: '1', name: 'John Doe', email: 'john@example.com', online: true },
+    { id: '2', name: 'Jane Smith', email: 'jane@example.com', online: false },
+    { id: '3', name: 'Bob Johnson', email: 'bob@example.com', online: false },
+    { id: '4', name: 'Alice Brown', email: 'alice@example.com', online: false },
+  ])
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null)
-  const [availableSlots, setAvailableSlots] = useState<Date[]>([])
-  const [isLoadingSellers, setIsLoadingSellers] = useState(true);
+  const [availableSlots, setAvailableSlots] = useState<Record<string, Date[]>>({})
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'booking' | 'success' | 'error'>('idle');
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (session?.user?.email) {
-      fetch('/api/sellers')
-        .then(res => res.json())
-        .then(data => {
-            setSellers(data.sellers || [])
-            setIsLoadingSellers(false);
-        })
-        .catch(console.error)
-    }
-  }, [session])
-
-  useEffect(() => {
-    if (selectedSeller) {
+    if (selectedSeller && selectedSeller.online) {
       setIsLoadingSlots(true);
-      setAvailableSlots([]);
+      setAvailableSlots({});
       const startDate = new Date().toISOString();
       const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       
       fetch(`/api/availability/${selectedSeller.id}?startDate=${startDate}&endDate=${endDate}`)
         .then(res => res.json())
         .then(data => {
-          // Merge busy times and manual availability to calculate available slots
-          const busyTimes = data.busy || [];
-          const manualAvailability = data.manualAvailability || {};
+          const slots = generateAvailableSlots(data.busy || [], data.schedule);
+          // Group slots by date string
+          const groupedSlots = slots.reduce((acc, slot) => {
+            const dateKey = slot.toDateString();
+            if (!acc[dateKey]) {
+                acc[dateKey] = [];
+            }
+            acc[dateKey].push(slot);
+            return acc;
+          }, {} as Record<string, Date[]>);
 
-          // Convert manualAvailability to busy times to block those times
-          const manualBusyTimes = [];
-          for (const day in manualAvailability) {
-            const intervals = manualAvailability[day];
-            intervals.forEach((interval: { start: string; end: string }) => {
-              // Calculate date for the day in the next 7 days
-              const now = new Date();
-              const dayIndex = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(day);
-              if (dayIndex === -1) return;
-              const date = new Date(now);
-              const diff = (dayIndex + 7 - date.getDay()) % 7;
-              date.setDate(date.getDate() + diff);
-              // Create busy time objects with start and end ISO strings
-              const startDateTime = new Date(date);
-              const [startHour, startMinute] = interval.start.split(':').map(Number);
-              startDateTime.setHours(startHour, startMinute, 0, 0);
-              const endDateTime = new Date(date);
-              const [endHour, endMinute] = interval.end.split(':').map(Number);
-              endDateTime.setHours(endHour, endMinute, 0, 0);
-              manualBusyTimes.push({ start: startDateTime.toISOString(), end: endDateTime.toISOString() });
-            });
-          }
-
-          // Combine busy times from Google Calendar and manual availability
-          const combinedBusy = busyTimes.concat(manualBusyTimes);
-
-          const slots = generateAvailableSlots(combinedBusy);
-          setAvailableSlots(slots);
+          setAvailableSlots(groupedSlots);
         })
         .catch(console.error)
         .finally(() => setIsLoadingSlots(false));
+    } else {
+      // Clear slots if seller is not online or deselected
+      setAvailableSlots({});
     }
   }, [selectedSeller])
   
   // --- Core Logic ---
-  const generateAvailableSlots = (busy: BusyTime[]) => {
+  const generateAvailableSlots = (busy: BusyTime[], schedule: AvailabilitySchedule) => {
     const slots: Date[] = [];
     const now = new Date();
-    const startOfDay = new Date();
-    startOfDay.setHours(startOfDay.getHours() + 1, 0, 0, 0); 
-    
-    for (let d = 0; d < 5; d++) {
-        for (let h = 9; h < 17; h++) {
-            const slotTime = new Date(startOfDay);
-            slotTime.setDate(startOfDay.getDate() + d);
-            slotTime.setHours(h, 0, 0, 0);
-            if (slotTime < now) continue;
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const slotDuration = 60; // in minutes
 
-            const isBusy = busy.some(b => {
-                const start = new Date(b.start);
-                const end = new Date(b.end);
-                const slotEnd = new Date(slotTime.getTime() + 60 * 60 * 1000);
-                return (slotTime < end && slotEnd > start);
-            });
+    for (let d = 0; d < 7; d++) { // Check for the next 7 days
+        const currentDate = new Date();
+        currentDate.setDate(now.getDate() + d);
+        const dayName = daysOfWeek[currentDate.getDay()];
+        
+        const daySchedule = schedule ? schedule[dayName] : [];
+        if (!daySchedule || daySchedule.length === 0) continue;
 
-            if (!isBusy) slots.push(slotTime);
+        for (const interval of daySchedule) {
+            const [startHour, startMinute] = interval.start.split(':').map(Number);
+            const [endHour, endMinute] = interval.end.split(':').map(Number);
+
+            let slotTime = new Date(currentDate);
+            slotTime.setHours(startHour, startMinute, 0, 0);
+            
+            let endTime = new Date(currentDate);
+            endTime.setHours(endHour, endMinute, 0, 0);
+
+            while (slotTime < endTime) {
+                const slotEnd = new Date(slotTime.getTime() + slotDuration * 60 * 1000);
+                if (slotEnd > endTime) break; // Ensure slot doesn't exceed the interval
+                
+                if (slotTime > now) {
+                    const isBusy = busy.some(b => {
+                        const busyStart = new Date(b.start);
+                        const busyEnd = new Date(b.end);
+                        return (slotTime < busyEnd && slotEnd > busyStart);
+                    });
+
+                    if (!isBusy) {
+                        slots.push(new Date(slotTime));
+                    }
+                }
+                slotTime.setMinutes(slotTime.getMinutes() + slotDuration);
+            }
         }
     }
     return slots;
@@ -151,8 +152,13 @@ export default function BuyerPage() {
           endTime: new Date(selectedSlot.getTime() + 60 * 60 * 1000).toISOString()
         }),
       });
-      if (response.ok) setBookingStatus('success');
-      else setBookingStatus('error');
+      if (response.ok) {
+        setBookingStatus('success');
+      } else {
+        const errorData = await response.json();
+        console.error("Booking failed:", errorData.error);
+        setBookingStatus('error');
+      }
     } catch (error) {
       console.error(error);
       setBookingStatus('error');
@@ -162,7 +168,12 @@ export default function BuyerPage() {
   const closeModal = () => {
     setBookingStatus('idle');
     setSelectedSlot(null);
-    if (selectedSeller) setSelectedSeller({ ...selectedSeller });
+    // Refresh availability after booking
+    if (selectedSeller) {
+      const currentSeller = { ...selectedSeller };
+      setSelectedSeller(null); // Deselect to clear slots
+      setTimeout(() => setSelectedSeller(currentSeller), 100); // Reselect to trigger refresh
+    }
   }
   
   // Filter sellers based on search query
@@ -175,8 +186,8 @@ export default function BuyerPage() {
 
   if (!session) {
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-green-100 p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-10 text-center transform hover:scale-105 transition-transform duration-300">
                 <h1 className="text-4xl font-bold text-gray-800 mb-2">Appointment Booker</h1>
                 <p className="text-gray-600 mb-8">Sign in to book a meeting with our experts.</p>
                 <button
@@ -194,108 +205,115 @@ export default function BuyerPage() {
     <Fragment>
     <div className="min-h-screen bg-gray-50 font-sans">
       <header className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-800">Book an Appointment</h1>
           <div className="flex items-center space-x-4">
             <div className="text-right">
                 <p className="font-semibold text-gray-700">{session.user?.name}</p>
             </div>
-            {session.user?.image && <img src={session.user.image} alt="User Avatar" className="w-12 h-12 rounded-full" />}
-            <button onClick={() => signOut()} className="flex items-center bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-300 transition-all">
+            {session.user?.image && <img src={session.user.image} alt="User Avatar" className="w-10 h-10 rounded-full" />}
+            <button onClick={() => signOut({ callbackUrl: '/' })} className="flex items-center bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-300 transition-all">
               <LogoutIcon /> Sign Out
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
           {/* Step 1: Select a Seller */}
-          <div className="bg-white p-6 rounded-xl shadow-lg">
+          <div className="md:col-span-1 bg-white p-6 rounded-xl shadow-lg sticky top-24">
             <h2 className="text-xl font-bold text-gray-800 border-b pb-4 mb-4">1. Select a Seller</h2>
-            
-            {/* Search Input */}
             <div className="relative mb-4">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <SearchIcon />
-                </div>
-                <input
-                    type="text"
-                    placeholder="Search for a seller by name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"> <SearchIcon /> </div>
+                <input type="text" placeholder="Search for a seller..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500" />
             </div>
             
-            {isLoadingSellers ? <p>Loading sellers...</p> : (
-                <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
-                    {filteredSellers.map(seller => (
-                        <div key={seller.id} className={`flex items-center p-4 rounded-lg cursor-pointer transition-all border-2 ${selectedSeller?.id === seller.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}`} onClick={() => setSelectedSeller(seller)}>
-                            <img src={seller.image || '/default-avatar.png'} alt={seller.name} className="w-12 h-12 rounded-full mr-4" />
-                            <div>
-                                <p className="font-bold text-gray-900">{seller.name}</p>
-                                <p className="text-sm text-gray-500">{seller.email}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {filteredSellers.length > 0 ? filteredSellers.map(seller => (
+                  <div key={seller.id} className={`flex items-center p-4 rounded-lg transition-all border-2 ${seller.online ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} ${selectedSeller?.id === seller.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}`} onClick={seller.online ? () => setSelectedSeller(seller) : undefined}>
+                      <img src={seller.image || '/default-avatar.png'} alt={seller.name} className="w-12 h-12 rounded-full mr-4" />
+                      <div className="flex-1">
+                          <p className="font-bold text-gray-900">{seller.name}</p>
+                          <p className="text-sm text-gray-500">{seller.email}</p>
+                          {seller.online && <span className="text-green-600 text-xs font-medium">Online</span>}
+                      </div>
+                      {seller.online && <div className="w-3 h-3 bg-green-500 rounded-full"></div>}
+                  </div>
+              )) : <p className="text-center text-gray-500 pt-4">No sellers found.</p>}
+            </div>
           </div>
 
           {/* Step 2: Pick a Time Slot (conditionally rendered) */}
-          {selectedSeller && (
-            <div className="bg-white p-6 rounded-xl shadow-lg animate-fade-in">
-              <h2 className="text-xl font-bold text-gray-800 border-b pb-4 mb-4">2. Pick a Time Slot for {selectedSeller.name}</h2>
-              {isLoadingSlots ? (
-                  <div className="flex items-center justify-center h-full text-gray-500 py-10">
-                      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3"></div>
-                      <span>Fetching available times...</span>
+          <div className="md:col-span-2">
+            {selectedSeller && (
+              <div className="bg-white p-6 rounded-xl shadow-lg animate-fade-in">
+                <h2 className="text-xl font-bold text-gray-800 border-b pb-4 mb-4">2. Pick a Time Slot for {selectedSeller.name}</h2>
+                {isLoadingSlots ? (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500 py-10">
+                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <span>Fetching available times...</span>
                   </div>
-              ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                      {availableSlots.length > 0 ? availableSlots.map((slot, index) => (
-                          <button key={index} className="flex items-center justify-center text-center p-3 border rounded-lg font-semibold text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-600 hover:text-white hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transform transition-all hover:-translate-y-1" onClick={() => setSelectedSlot(slot)}>
-                              <ClockIcon /> {slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </button>
-                      )) : (
-                          <p className="col-span-full text-center text-gray-500 py-10">No available slots found for this seller in the next 5 days.</p>
-                      )}
+                ) : (
+                  <div className="space-y-6">
+                    {Object.keys(availableSlots).length > 0 ? Object.entries(availableSlots).map(([date, slots]) => (
+                        <div key={date}>
+                            <h3 className="font-bold text-lg text-gray-700 mb-3">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {slots.map((slot, index) => (
+                                    <button key={index} className="flex items-center justify-center text-center p-3 border rounded-lg font-semibold text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-600 hover:text-white hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transform transition-all hover:-translate-y-1" onClick={() => setSelectedSlot(slot)}>
+                                        <ClockIcon /> {slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )) : (
+                        <p className="col-span-full text-center text-gray-500 py-10">No available slots found for this seller in the next week.</p>
+                    )}
                   </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+            {!selectedSeller && (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500 bg-gray-100 rounded-xl p-10 border-2 border-dashed">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1a6 6 0 00-5.176-5.97M15 21H9" /></svg>
+                    <h3 className="text-lg font-semibold">Select a seller to see their availability</h3>
+                </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
 
     {/* Booking Confirmation Modal */}
     {selectedSlot && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
-            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-20 p-4">
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full text-center transform transition-all animate-scale-in">
                 {bookingStatus === 'idle' && (
                     <Fragment>
                         <h3 className="text-xl font-bold mb-2">Confirm Your Appointment</h3>
-                        <p className="text-gray-600 mb-6">Book with <span className="font-semibold">{selectedSeller?.name}</span> on <br/> <span className="font-semibold">{selectedSlot.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</span> at <span className="font-semibold">{selectedSlot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>?</p>
+                        <p className="text-gray-600 mb-6">Book with <span className="font-semibold">{selectedSeller?.name}</span> on <br/> <span className="font-semibold">{selectedSlot.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</span> at <span className="font-semibold">{selectedSlot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>?</p>
                         <div className="flex justify-center space-x-4">
-                            <button onClick={() => setSelectedSlot(null)} className="py-2 px-6 bg-gray-200 rounded-lg font-semibold">Cancel</button>
-                            <button onClick={handleBookAppointment} className="py-2 px-6 bg-blue-600 text-white rounded-lg font-semibold">Confirm</button>
+                            <button onClick={() => setSelectedSlot(null)} className="py-2 px-6 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
+                            <button onClick={handleBookAppointment} className="py-2 px-6 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors">Confirm</button>
                         </div>
                     </Fragment>
                 )}
                 {bookingStatus === 'booking' && <LoadingSpinner text="Booking..." />}
                 {bookingStatus === 'success' && (
                     <Fragment>
+                        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4"><svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>
                         <h3 className="text-xl font-bold text-green-600 mb-2">Success!</h3>
                         <p className="text-gray-600 mb-6">Your appointment is confirmed. Check your Google Calendar!</p>
-                        <button onClick={closeModal} className="py-2 px-6 bg-green-600 text-white rounded-lg font-semibold">Done</button>
+                        <button onClick={closeModal} className="py-2 px-6 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors">Done</button>
                     </Fragment>
                 )}
                 {bookingStatus === 'error' && (
                      <Fragment>
+                        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4"><svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></div>
                         <h3 className="text-xl font-bold text-red-600 mb-2">Error</h3>
-                        <p className="text-gray-600 mb-6">Something went wrong. Please try again.</p>
-                        <button onClick={closeModal} className="py-2 px-6 bg-red-600 text-white rounded-lg font-semibold">Close</button>
+                        <p className="text-gray-600 mb-6">Something went wrong. The slot might have been taken. Please try again.</p>
+                        <button onClick={closeModal} className="py-2 px-6 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors">Close</button>
                     </Fragment>
                 )}
             </div>
