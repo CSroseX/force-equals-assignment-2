@@ -1,9 +1,9 @@
 import NextAuth from 'next-auth';
-import { type NextAuthConfig, type Account, type Session } from 'next-auth';
+import { type Account, type Session } from 'next-auth';
 import { type JWT } from 'next-auth/jwt';
 import GoogleProvider from 'next-auth/providers/google';
 
-export const authOptions: NextAuthConfig = {
+export const authOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -27,15 +27,14 @@ export const authOptions: NextAuthConfig = {
       return token;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
-      session.accessToken = token.accessToken;
-      session.refreshToken = token.refreshToken;
-      session.userId = token.sub; // Add user ID to the session
+      (session as any).accessToken = token.accessToken;
+      (session as any).refreshToken = token.refreshToken;
+      (session as any).userId = token.sub;
       return session;
     },
   },
 };
 
-const { handlers } = NextAuth(authOptions);
-
-// Explicitly export the GET and POST methods from the handlers object
+const nextAuth = NextAuth(authOptions);
+export const { handlers, auth, signIn, signOut } = nextAuth;
 export const { GET, POST } = handlers;
