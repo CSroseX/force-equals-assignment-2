@@ -1,45 +1,41 @@
-// src/app/api/sellers/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import NextAuth from 'next-auth';
+import { type NextAuthConfig, type Account, type Session } from 'next-auth';
+import { type JWT } from 'next-auth/jwt';
+import GoogleProvider from 'next-auth/providers/google';
 
-export async function GET() {
-  try {
-    // Your GET logic here
-    return NextResponse.json({ message: 'GET request successful' });
-  } catch (error) {
-    // Either use the error variable
-    console.error('GET error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+export const authOptions: NextAuthConfig = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: 'openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+        },
+      },
+    }),
+  ],
+  pages: {
+    signIn: '/auth/signin',
+  },
+  callbacks: {
+    async jwt({ token, account }: { token: JWT; account: Account | null }) {
+      if (account) {
+        token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
+      }
+      return token;
+    },
+    async session({ session, token }: { session: Session; token: JWT }) {
+      session.accessToken = token.accessToken;
+      session.refreshToken = token.refreshToken;
+      session.userId = token.sub; // Add user ID to the session
+      return session;
+    },
+  },
+};
 
-export async function POST(request: NextRequest) {
-  try {
-    // Your POST logic here
-    const body = await request.json();
-    return NextResponse.json({ message: 'POST request successful', data: body });
-  } catch (error) {
-    // Either use the error variable
-    console.error('POST error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+const { handlers } = NextAuth(authOptions);
 
-// Alternative approach - if you don't want to use the error variable:
-// export async function GET() {
-//   try {
-//     // Your GET logic here
-//     return NextResponse.json({ message: 'GET request successful' });
-//   } catch {
-//     // No variable name - ESLint won't complain
-//     return NextResponse.json(
-//       { error: 'Internal server error' },
-//       { status: 500 }
-//     );
-//   }
-// }
+// Explicitly export the GET and POST methods from the handlers object
+export const { GET, POST } = handlers;
