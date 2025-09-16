@@ -3,6 +3,18 @@ import { type Account, type Session } from 'next-auth';
 import { type JWT } from 'next-auth/jwt';
 import GoogleProvider from 'next-auth/providers/google';
 
+// Define extended types
+interface ExtendedSession extends Session {
+  accessToken?: string;
+  refreshToken?: string;
+  userId?: string;
+}
+
+interface ExtendedJWT extends JWT {
+  accessToken?: string;
+  refreshToken?: string;
+}
+
 export const authOptions = {
   providers: [
     GoogleProvider({
@@ -20,17 +32,22 @@ export const authOptions = {
   },
   callbacks: {
     async jwt({ token, account }: { token: JWT; account: Account | null }) {
+      const extendedToken = token as ExtendedJWT;
       if (account) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
+        extendedToken.accessToken = account.access_token;
+        extendedToken.refreshToken = account.refresh_token;
       }
-      return token;
+      return extendedToken;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
-      (session as any).accessToken = token.accessToken;
-      (session as any).refreshToken = token.refreshToken;
-      (session as any).userId = token.sub;
-      return session;
+      const extendedToken = token as ExtendedJWT;
+      const extendedSession = session as ExtendedSession;
+      
+      extendedSession.accessToken = extendedToken.accessToken;
+      extendedSession.refreshToken = extendedToken.refreshToken;
+      extendedSession.userId = extendedToken.sub;
+      
+      return extendedSession;
     },
   },
 };

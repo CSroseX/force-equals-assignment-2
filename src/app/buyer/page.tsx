@@ -22,7 +22,6 @@ interface AvailabilitySchedule {
     [key: string]: { start: string; end: string }[];
 }
 
-
 // --- Reusable Icon & Loading Components ---
 const GoogleIcon = () => (
     <svg className="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039L38.802 8.922C34.79 5.232 29.623 3 24 3C12.955 3 4 11.955 4 23s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FF3D00" d="M6.306 14.691c-1.332 2.625-2.074 5.631-2.074 8.809c0 3.178.742 6.184 2.074 8.809L11.05 29.648C9.72 27.224 9 24.542 9 21.5s.72-5.724 2.05-8.148L6.306 14.691z"></path><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-4.757-3.714C30.636 36.753 27.463 38 24 38c-5.842 0-10.858-3.518-12.607-8.381l-4.95 3.886C9.023 39.525 15.908 44 24 44z"></path><path fill="#1976D2" d="M43.611 20.083L43.595 20L42 20H24v8h11.303c-.792 2.447-2.233 4.515-4.092 5.841L34.15 37.95C39.193 33.718 42.418 27.352 42.418 20c0-1.341-.138-2.65-.389-3.917z"></path></svg>
@@ -47,18 +46,34 @@ export default function BuyerPage() {
   const { data: session, status } = useSession()
   
   // State Management
-  const sellers: Seller[] = [
-    { id: '1', name: 'John Doe', email: 'john@example.com', online: true },
-    { id: '2', name: 'Jane Smith', email: 'jane@example.com', online: false },
-    { id: '3', name: 'Bob Johnson', email: 'bob@example.com', online: false },
-    { id: '4', name: 'Alice Brown', email: 'alice@example.com', online: false },
-  ]
+  const [sellers, setSellers] = useState<Seller[]>([]);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null)
   const [availableSlots, setAvailableSlots] = useState<Record<string, Date[]>>({})
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'booking' | 'success' | 'error'>('idle');
   const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
+
+  // Fetch sellers from API
+  useEffect(() => {
+    setIsLoadingSellers(true);
+    fetch('/api/sellers')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setSellers(data);
+        } else {
+          console.error('Expected array of sellers, got:', data);
+          setSellers([]);
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching sellers:', error);
+        setSellers([]);
+      })
+      .finally(() => setIsLoadingSellers(false));
+  }, []);
 
   useEffect(() => {
     if (selectedSeller && selectedSeller.online) {
@@ -231,7 +246,11 @@ export default function BuyerPage() {
             </div>
             
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-              {filteredSellers.length > 0 ? filteredSellers.map(seller => (
+              {isLoadingSellers ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              ) : filteredSellers.length > 0 ? filteredSellers.map(seller => (
                   <div key={seller.id} className={`flex items-center p-4 rounded-lg transition-all border-2 ${seller.online ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} ${selectedSeller?.id === seller.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}`} onClick={seller.online ? () => setSelectedSeller(seller) : undefined}>
                       <Image src={seller.image || '/default-avatar.png'} alt={seller.name} width={48} height={48} className="w-12 h-12 rounded-full mr-4" />
                       <div className="flex-1">

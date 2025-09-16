@@ -1,33 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const sellerId = searchParams.get('sellerId')
-
-    if (!sellerId) {
-      return NextResponse.json({ error: 'sellerId is required' }, { status: 400 })
-    }
-
-    const { data, error } = await supabase
-      .from('seller_availability')
-      .select('availability')
-      .eq('seller_id', sellerId)
-      .single()
-
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    const availability = data?.availability || {}
-    return NextResponse.json({ availability })
-  } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
