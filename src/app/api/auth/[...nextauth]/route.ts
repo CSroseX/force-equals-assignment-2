@@ -1,43 +1,45 @@
-// ✅ Correct import for Auth.js v5
-import NextAuth from 'next-auth';
-// ✅ Import necessary types for callbacks
-import { type Account, type Session, type NextAuthConfig } from 'next-auth';
-import { type JWT } from 'next-auth/jwt';
-import GoogleProvider from 'next-auth/providers/google';
+// src/app/api/sellers/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 
-export const authOptions: NextAuthConfig = {
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: 'openid email profile https.www.googleapis.com/auth/calendar.events https.www.googleapis.com/auth/calendar.readonly',
-        },
-      },
-    }),
-  ],
-  pages: {
-    signIn: '/auth/signin',
-  },
-  callbacks: {
-    // ✅ Replaced 'any' with specific types for full type safety
-    async jwt({ token, account }: { token: JWT; account: Account | null }) {
-      if (account) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-      }
-      return token;
-    },
-    // ✅ Replaced 'any' with specific types
-    async session({ session, token }: { session: Session; token: JWT }) {
-      session.accessToken = token.accessToken;
-      session.refreshToken = token.refreshToken;
-      session.userId = token.sub; // Add user ID to the session
-      return session;
-    },
-  },
-};
+export async function GET() {
+  try {
+    // Your GET logic here
+    return NextResponse.json({ message: 'GET request successful' });
+  } catch (error) {
+    // Either use the error variable
+    console.error('GET error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
 
-// ✅ Updated to the modern Auth.js v5 syntax for exporting handlers
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
+export async function POST(request: NextRequest) {
+  try {
+    // Your POST logic here
+    const body = await request.json();
+    return NextResponse.json({ message: 'POST request successful', data: body });
+  } catch (error) {
+    // Either use the error variable
+    console.error('POST error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Alternative approach - if you don't want to use the error variable:
+// export async function GET() {
+//   try {
+//     // Your GET logic here
+//     return NextResponse.json({ message: 'GET request successful' });
+//   } catch {
+//     // No variable name - ESLint won't complain
+//     return NextResponse.json(
+//       { error: 'Internal server error' },
+//       { status: 500 }
+//     );
+//   }
+// }
