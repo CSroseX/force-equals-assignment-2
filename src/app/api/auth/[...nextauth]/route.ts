@@ -1,15 +1,18 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import NextAuth from 'next-auth/next'
-import GoogleProvider from 'next-auth/providers/google'
+// ✅ Correct import for Auth.js v5
+import NextAuth from 'next-auth';
+// ✅ Import necessary types for callbacks
+import { type Account, type Session, type NextAuthConfig } from 'next-auth';
+import { type JWT } from 'next-auth/jwt';
+import GoogleProvider from 'next-auth/providers/google';
 
-const handler = NextAuth({
+export const authOptions: NextAuthConfig = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+          scope: 'openid email profile https.www.googleapis.com/auth/calendar.events https.www.googleapis.com/auth/calendar.readonly',
         },
       },
     }),
@@ -18,19 +21,23 @@ const handler = NextAuth({
     signIn: '/auth/signin',
   },
   callbacks: {
-    async jwt({ token, account }: any) {
+    // ✅ Replaced 'any' with specific types for full type safety
+    async jwt({ token, account }: { token: JWT; account: Account | null }) {
       if (account) {
-        token.accessToken = account.access_token
-        token.refreshToken = account.refresh_token
+        token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
       }
-      return token
+      return token;
     },
-    async session({ session, token }: any) {
-      session.accessToken = token.accessToken
-      session.refreshToken = token.refreshToken
-      return session
+    // ✅ Replaced 'any' with specific types
+    async session({ session, token }: { session: Session; token: JWT }) {
+      session.accessToken = token.accessToken;
+      session.refreshToken = token.refreshToken;
+      session.userId = token.sub; // Add user ID to the session
+      return session;
     },
   },
-})
+};
 
-export { handler as GET, handler as POST }
+// ✅ Updated to the modern Auth.js v5 syntax for exporting handlers
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
