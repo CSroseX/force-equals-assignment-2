@@ -71,8 +71,38 @@ export default function BuyerPage() {
       fetch(`/api/availability/${selectedSeller.id}?startDate=${startDate}&endDate=${endDate}`)
         .then(res => res.json())
         .then(data => {
-          const slots = generateAvailableSlots(data.busy || [])
-          setAvailableSlots(slots)
+          // Merge busy times and manual availability to calculate available slots
+          const busyTimes = data.busy || [];
+          const manualAvailability = data.manualAvailability || {};
+
+          // Convert manualAvailability to busy times to block those times
+          const manualBusyTimes = [];
+          for (const day in manualAvailability) {
+            const intervals = manualAvailability[day];
+            intervals.forEach((interval: { start: string; end: string }) => {
+              // Calculate date for the day in the next 7 days
+              const now = new Date();
+              const dayIndex = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(day);
+              if (dayIndex === -1) return;
+              const date = new Date(now);
+              const diff = (dayIndex + 7 - date.getDay()) % 7;
+              date.setDate(date.getDate() + diff);
+              // Create busy time objects with start and end ISO strings
+              const startDateTime = new Date(date);
+              const [startHour, startMinute] = interval.start.split(':').map(Number);
+              startDateTime.setHours(startHour, startMinute, 0, 0);
+              const endDateTime = new Date(date);
+              const [endHour, endMinute] = interval.end.split(':').map(Number);
+              endDateTime.setHours(endHour, endMinute, 0, 0);
+              manualBusyTimes.push({ start: startDateTime.toISOString(), end: endDateTime.toISOString() });
+            });
+          }
+
+          // Combine busy times from Google Calendar and manual availability
+          const combinedBusy = busyTimes.concat(manualBusyTimes);
+
+          const slots = generateAvailableSlots(combinedBusy);
+          setAvailableSlots(slots);
         })
         .catch(console.error)
         .finally(() => setIsLoadingSlots(false));

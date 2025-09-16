@@ -36,8 +36,20 @@ export async function GET(
 
     const busy = response.data.calendars?.primary?.busy || []
 
-    // For simplicity, return busy times
-    return NextResponse.json({ busy })
+    // Fetch manual availability from seller_availability table
+    const { data: manualAvailabilityData, error: manualError } = await supabase
+      .from('seller_availability')
+      .select('availability')
+      .eq('seller_id', sellerId)
+      .single()
+
+    let manualAvailability = {}
+    if (!manualError && manualAvailabilityData) {
+      manualAvailability = manualAvailabilityData.availability || {}
+    }
+
+    // Merge busy times and manual availability into one response
+    return NextResponse.json({ busy, manualAvailability })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 })

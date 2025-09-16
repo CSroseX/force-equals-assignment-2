@@ -1,7 +1,18 @@
 'use client'
 
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+
+// --- Interface Definitions ---
+interface TimeInterval {
+    start: string;
+    end: string;
+}
+
+interface AvailabilitySchedule {
+    [key: string]: TimeInterval[];
+}
+
 
 // --- Helper Components for Icons ---
 const GoogleIcon = () => (
@@ -25,6 +36,12 @@ const CalendarIcon = () => (
     </svg>
 );
 
+const PencilIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.536L15.232 5.232z" />
+    </svg>
+);
+
 const LogoutIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -40,17 +57,31 @@ const LoadingSpinner = () => (
 
 
 export default function SellerDashboard() {
-  const { data: session, status } = useSession()
-  const [isSaved, setIsSaved] = useState(false)
-  const [busyTimes, setBusyTimes] = useState<any[]>([])
+  const { data: session, status } = useSession();
+  const [isSaved, setIsSaved] = useState(false);
+  const [busyTimes, setBusyTimes] = useState<any[]>([]);
+
+  // --- NEW: State for availability editor ---
+  const initialAvailability: AvailabilitySchedule = {
+    Sunday: [],
+    Monday: [{ start: '09:00', end: '17:00' }],
+    Tuesday: [{ start: '09:00', end: '17:00' }],
+    Wednesday: [{ start: '09:00', end: '17:00' }],
+    Thursday: [{ start: '09:00', end: '17:00' }],
+    Friday: [{ start: '09:00', end: '17:00' }],
+    Saturday: [],
+  };
+  const [availability, setAvailability] = useState<AvailabilitySchedule>(initialAvailability);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
 
   // Fix TypeScript errors for session properties
   const refreshToken = (session as any)?.refreshToken
   const userId = (session?.user as any)?.id
 
+  // Effect for saving seller data
   useEffect(() => {
     if (session?.user?.email && refreshToken) {
-      // Save seller to DB
       fetch('/api/sellers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,17 +91,16 @@ export default function SellerDashboard() {
           refreshToken: refreshToken,
         }),
       })
-        .then(() => setIsSaved(true))
-        .catch(console.error)
+      .then(() => setIsSaved(true))
+      .catch(console.error)
     }
   }, [session, refreshToken])
 
+  // Effect for fetching busy times
   useEffect(() => {
     if (session?.user?.email && userId) {
-      // Fetch availability for seller for the next 7 days
       const startDate = new Date().toISOString();
       const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
       fetch(`/api/availability/${userId}?startDate=${startDate}&endDate=${endDate}`)
         .then(res => res.json())
         .then(data => setBusyTimes(data.busy || []))
@@ -78,6 +108,67 @@ export default function SellerDashboard() {
     }
   }, [session, userId])
 
+  // --- NEW: Functions to handle availability changes ---
+  const handleDayToggle = (day: string) => {
+    setAvailability(prev => {
+        const newAvail = { ...prev };
+        if (newAvail[day].length > 0) {
+            newAvail[day] = []; // Day is off
+        } else {
+            newAvail[day] = [{ start: '09:00', end: '17:00' }]; // Default hours
+        }
+        return newAvail;
+    });
+  };
+
+  const handleTimeChange = (day: string, index: number, type: 'start' | 'end', value: string) => {
+    setAvailability(prev => {
+        const newAvail = { ...prev };
+        const intervals = [...newAvail[day]];
+        intervals[index] = { ...intervals[index], [type]: value };
+        newAvail[day] = intervals;
+        return newAvail;
+    });
+  };
+
+  const addInterval = (day: string) => {
+      setAvailability(prev => {
+          const newAvail = { ...prev };
+          newAvail[day].push({ start: '09:00', end: '17:00' });
+          return newAvail;
+      });
+  };
+
+  const removeInterval = (day: string, index: number) => {
+      setAvailability(prev => {
+          const newAvail = { ...prev };
+          const intervals = [...newAvail[day]];
+          intervals.splice(index, 1);
+          newAvail[day] = intervals;
+          return newAvail;
+      });
+  };
+
+  const handleSaveAvailability = async () => {
+      if (!userId) return;
+      setSaveStatus('saving');
+      try {
+          const response = await fetch('/api/availability/editor', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sellerId: userId, schedule: availability }),
+          });
+          if (!response.ok) throw new Error('Failed to save availability');
+          setSaveStatus('success');
+          setTimeout(() => setSaveStatus('idle'), 3000); // Reset after 3 seconds
+      } catch (error) {
+          console.error(error);
+          setSaveStatus('error');
+          setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+  };
+
+  // Render logic...
   if (status === 'loading') return <LoadingSpinner />
 
   if (!session) {
@@ -99,8 +190,24 @@ export default function SellerDashboard() {
     )
   }
 
+  const [showNotification, setShowNotification] = useState(false);
+
+  // Show notification on successful save
+  useEffect(() => {
+    if (saveStatus === 'success') {
+      setShowNotification(true);
+      const timer = setTimeout(() => setShowNotification(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [saveStatus]);
+
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
+      {showNotification && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded shadow-lg z-50 animate-slide-down">
+          Availability updated
+        </div>
+      )}
       <header className="bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-800">Seller Dashboard</h1>
@@ -110,8 +217,7 @@ export default function SellerDashboard() {
                 <p className="text-sm text-gray-500">{session.user?.email}</p>
             </div>
             {session.user?.image && <img src={session.user.image} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-blue-500 p-1" />}
-            <button
-              onClick={() => signOut({ callbackUrl: '/' })}
+            <button onClick={() => signOut({ callbackUrl: '/' })}
               className="flex items-center bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all duration-200"
             >
               <LogoutIcon />
@@ -121,63 +227,110 @@ export default function SellerDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* --- Google Calendar Embed at Top --- */}
         <div className="bg-white p-8 rounded-xl shadow-lg">
           <div className="flex items-center mb-6 border-b pb-4">
             <CheckCircleIcon />
-            <h2 className="text-xl font-semibold text-gray-800">
-                {isSaved ? "Google Calendar Connected" : "Connecting to Google Calendar..."}
-            </h2>
+            <h2 className="text-xl font-semibold text-gray-800">{isSaved ? "Google Calendar Connected" : "Connecting..."}</h2>
           </div>
-
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-              <CalendarIcon />
-              Your Google Calendar
-            </h3>
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <iframe
-                src="https://calendar.google.com/calendar/embed?src=chitranshsaxena67%40gmail.com&ctz=Asia%2FKolkata"
-                style={{border: 0}}
-                width="100%"
-                height="600"
-                frameBorder="0"
-                scrolling="no"
-              ></iframe>
-            </div>
+          <div className="bg-gray-50 p-4 rounded-lg">
+            {/* NOTE: For a real app, this src should be dynamic based on the signed-in user's email. */}
+            <iframe
+              src={`https://calendar.google.com/calendar/embed?src=${session.user?.email}&ctz=Asia%2FKolkata`}
+              style={{border: 0}}
+              width="100%"
+              height="400"
+              frameBorder="0"
+              scrolling="no"
+            ></iframe>
           </div>
+        </div>
 
-          <div>
-            <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-              <CalendarIcon />
-              Your Busy Schedule for the Next 7 Days
-            </h3>
-            {busyTimes.length === 0 ? (
-              <div className="text-center py-10 px-6 bg-gray-50 rounded-lg">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">It looks like you're free!</h3>
-                <p className="mt-1 text-sm text-gray-500">No busy events were found in your calendar for the upcoming week.</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* --- Left Column: Availability Editor --- */}
+          <div className="lg:col-span-2 space-y-8">
+              {/* --- NEW: Availability Editor --- */}
+              <div className="bg-white p-8 rounded-xl shadow-lg">
+                  <h3 className="text-xl font-semibold text-gray-800 mb-6 flex items-center border-b pb-4">
+                      <PencilIcon /> Set Your Weekly Availability
+                  </h3>
+                  <div className="space-y-6">
+                      {Object.keys(availability).map((day) => (
+                          <div key={day} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start">
+                              <div className="flex items-center h-full">
+                                  <input
+                                      type="checkbox"
+                                      id={day}
+                                      checked={availability[day].length > 0}
+                                      onChange={() => handleDayToggle(day)}
+                                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <label htmlFor={day} className="ml-3 block text-md font-medium text-gray-700">{day}</label>
+                              </div>
+                              <div className="md:col-span-3">
+                                  {availability[day].length > 0 ? (
+                                      <div className="space-y-3">
+                                          {availability[day].map((interval, index) => (
+                                              <div key={index} className="flex items-center space-x-2">
+                                                  <input type="time" value={interval.start} onChange={(e) => handleTimeChange(day, index, 'start', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                                  <span className="text-gray-500">-</span>
+                                                  <input type="time" value={interval.end} onChange={(e) => handleTimeChange(day, index, 'end', e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                                  <button onClick={() => removeInterval(day, index)} className="text-gray-400 hover:text-red-500 p-1 rounded-full">&times;</button>
+                                              </div>
+                                          ))}
+                                          <button onClick={() => addInterval(day)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">+ Add interval</button>
+                                      </div>
+                                  ) : (
+                                      <p className="text-gray-500 text-sm italic h-full flex items-center">Unavailable</p>
+                                  )}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+                  <div className="mt-8 pt-6 border-t flex items-center justify-end space-x-4">
+                      {saveStatus === 'success' && <p className="text-green-600 font-medium">Saved Successfully!</p>}
+                      {saveStatus === 'error' && <p className="text-red-600 font-medium">Error saving. Please try again.</p>}
+                      <button
+                          onClick={handleSaveAvailability}
+                          disabled={saveStatus === 'saving'}
+                          className="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg shadow hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                          {saveStatus === 'saving' ? 'Saving...' : 'Save Availability'}
+                      </button>
+                  </div>
               </div>
-            ) : (
-              <ul className="space-y-3">
-                {busyTimes.map((time: any, index: number) => (
-                  <li key={index} className="flex items-center bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
-                    <div className="bg-blue-100 text-blue-800 rounded-lg p-3 mr-4">
+  
+              {/* --- Existing Busy Schedule Display --- */}
+              <div className="bg-white p-8 rounded-xl shadow-lg">
+                  <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center border-b pb-4">
                       <CalendarIcon />
+                      Your Booked Appointments (Next 7 Days)
+                  </h3>
+                  {busyTimes.length === 0 ? (
+                    <div className="text-center py-10 px-6 bg-gray-50 rounded-lg">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">It looks like you're free!</h3>
+                      <p className="mt-1 text-sm text-gray-500">No busy events were found in your calendar for the upcoming week.</p>
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">
-                        {new Date(time.start).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(time.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} - {new Date(time.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  ) : (
+                    <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                      {busyTimes.map((time: any, index: number) => (
+                        <li key={index} className="flex items-center bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                          <div className="bg-blue-100 text-blue-800 rounded-lg p-3 mr-4">
+                            <CalendarIcon />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-800">{new Date(time.start).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                            <p className="text-sm text-gray-600">{new Date(time.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} - {new Date(time.end).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+              </div>
           </div>
+  
         </div>
       </main>
     </div>
