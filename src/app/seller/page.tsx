@@ -1,10 +1,16 @@
 'use client'
 
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { Fragment, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
 
 // --- Interface Definitions ---
 interface TimeInterval {
+    start: string;
+    end: string;
+}
+
+interface BusyTime {
     start: string;
     end: string;
 }
@@ -59,7 +65,7 @@ const LoadingSpinner = () => (
 export default function SellerDashboard() {
   const { data: session, status } = useSession();
   const [isSaved, setIsSaved] = useState(false);
-  const [busyTimes, setBusyTimes] = useState<any[]>([]);
+  const [busyTimes, setBusyTimes] = useState<BusyTime[]>([]);
 
   // --- NEW: State for availability editor ---
   const initialAvailability: AvailabilitySchedule = {
@@ -79,8 +85,8 @@ export default function SellerDashboard() {
 
 
   // Fix TypeScript errors for session properties
-  const refreshToken = (session as any)?.refreshToken
-  const userId = (session?.user as any)?.id
+  const refreshToken = session?.refreshToken
+  const userId = session?.user?.id
 
   // Effect for saving seller data
   useEffect(() => {
@@ -106,10 +112,19 @@ export default function SellerDashboard() {
       const endDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       fetch(`/api/availability/${userId}?startDate=${startDate}&endDate=${endDate}`)
         .then(res => res.json())
-        .then(data => setBusyTimes(data.busy || []))
+        .then((data: { busy?: BusyTime[] }) => setBusyTimes(data.busy || []))
         .catch(console.error)
     }
   }, [session, userId])
+
+  // Show notification on successful save
+  useEffect(() => {
+    if (saveStatus === 'success') {
+      setShowNotification(true);
+      const timer = setTimeout(() => setShowNotification(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [saveStatus]);
 
   // --- NEW: Functions to handle availability changes ---
   const handleDayToggle = (day: string) => {
@@ -193,15 +208,6 @@ export default function SellerDashboard() {
     )
   }
 
-  // Show notification on successful save
-  useEffect(() => {
-    if (saveStatus === 'success') {
-      setShowNotification(true);
-      const timer = setTimeout(() => setShowNotification(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [saveStatus]);
-
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
       {showNotification && (
@@ -214,10 +220,10 @@ export default function SellerDashboard() {
           <h1 className="text-2xl font-bold text-gray-800">Seller Dashboard</h1>
           <div className="flex items-center space-x-4">
             <div className="text-right">
-                <p className="font-semibold text-gray-700">{session.user?.name}</p>
-                <p className="text-sm text-gray-500">{session.user?.email}</p>
+                <p className="font-semibold text-gray-700">{session!.user?.name}</p>
+                <p className="text-sm text-gray-500">{session!.user?.email}</p>
             </div>
-            {session.user?.image && <img src={session.user.image} alt="User Avatar" className="w-12 h-12 rounded-full border-2 border-blue-500 p-1" />}
+            {session!.user?.image && <Image src={session!.user.image} alt="User Avatar" width={48} height={48} className="w-12 h-12 rounded-full border-2 border-blue-500 p-1" />}
             <button onClick={() => signOut({ callbackUrl: '/' })}
               className="flex items-center bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-all duration-200"
             >
@@ -238,7 +244,7 @@ export default function SellerDashboard() {
           <div className="bg-gray-50 p-4 rounded-lg">
             {/* NOTE: For a real app, this src should be dynamic based on the signed-in user's email. */}
             <iframe
-              src={`https://calendar.google.com/calendar/embed?src=${session.user?.email}&ctz=Asia%2FKolkata`}
+              src={`https://calendar.google.com/calendar/embed?src=${session!.user?.email}&ctz=Asia%2FKolkata`}
               style={{border: 0}}
               width="100%"
               height="400"
@@ -311,12 +317,12 @@ export default function SellerDashboard() {
                   {busyTimes.length === 0 ? (
                     <div className="text-center py-10 px-6 bg-gray-50 rounded-lg">
                       <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                      <h3 className="mt-2 text-sm font-medium text-gray-900">It looks like you're free!</h3>
+                      <h3 className="mt-2 text-sm font-medium text-gray-900">It looks like you&apos;re free!</h3>
                       <p className="mt-1 text-sm text-gray-500">No busy events were found in your calendar for the upcoming week.</p>
                     </div>
                   ) : (
                     <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                      {busyTimes.map((time: any, index: number) => (
+                      {busyTimes.map((time: BusyTime, index: number) => (
                         <li key={index} className="flex items-center bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
                           <div className="bg-blue-100 text-blue-800 rounded-lg p-3 mr-4">
                             <CalendarIcon />

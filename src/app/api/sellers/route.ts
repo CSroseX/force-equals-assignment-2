@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ sellers: data })
-  } catch (_error) {
+  } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ message: 'Seller saved', seller: data })
-  } catch (_error) {
+  } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

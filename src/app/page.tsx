@@ -51,7 +51,7 @@ export default function Home() {
               <BuyerIcon />
             </div>
             <div className="text-left">
-              <h3 className="text-xl font-bold text-gray-800">I'm a Buyer</h3>
+              <h3 className="text-xl font-bold text-gray-800">I&apos;m a Buyer</h3>
               <p className="text-gray-600">Find a seller and book an appointment instantly.</p>
             </div>
             <ArrowRightIcon className="ml-auto h-6 w-6 text-gray-400 group-hover:text-green-500 transition-colors" />
