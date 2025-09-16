@@ -2,6 +2,7 @@
 
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { Fragment, useEffect, useState } from 'react'
+import Image from 'next/image'
 
 // --- Interface Definitions ---
 interface Seller {
@@ -46,12 +47,12 @@ export default function BuyerPage() {
   const { data: session, status } = useSession()
   
   // State Management
-  const [sellers, setSellers] = useState<Seller[]>([
+  const sellers: Seller[] = [
     { id: '1', name: 'John Doe', email: 'john@example.com', online: true },
     { id: '2', name: 'Jane Smith', email: 'jane@example.com', online: false },
     { id: '3', name: 'Bob Johnson', email: 'bob@example.com', online: false },
     { id: '4', name: 'Alice Brown', email: 'alice@example.com', online: false },
-  ])
+  ]
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeller, setSelectedSeller] = useState<Seller | null>(null)
   const [availableSlots, setAvailableSlots] = useState<Record<string, Date[]>>({})
@@ -109,10 +110,10 @@ export default function BuyerPage() {
             const [startHour, startMinute] = interval.start.split(':').map(Number);
             const [endHour, endMinute] = interval.end.split(':').map(Number);
 
-            let slotTime = new Date(currentDate);
+            const slotTime = new Date(currentDate);
             slotTime.setHours(startHour, startMinute, 0, 0);
-            
-            let endTime = new Date(currentDate);
+
+            const endTime = new Date(currentDate);
             endTime.setHours(endHour, endMinute, 0, 0);
 
             while (slotTime < endTime) {
@@ -211,7 +212,7 @@ export default function BuyerPage() {
             <div className="text-right">
                 <p className="font-semibold text-gray-700">{session.user?.name}</p>
             </div>
-            {session.user?.image && <img src={session.user.image} alt="User Avatar" className="w-10 h-10 rounded-full" />}
+            {session.user?.image && <Image src={session.user.image} alt="User Avatar" width={40} height={40} className="w-10 h-10 rounded-full" />}
             <button onClick={() => signOut({ callbackUrl: '/' })} className="flex items-center bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-300 transition-all">
               <LogoutIcon /> Sign Out
             </button>
@@ -232,7 +233,7 @@ export default function BuyerPage() {
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               {filteredSellers.length > 0 ? filteredSellers.map(seller => (
                   <div key={seller.id} className={`flex items-center p-4 rounded-lg transition-all border-2 ${seller.online ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'} ${selectedSeller?.id === seller.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'border-gray-200 hover:border-blue-400 hover:bg-gray-50'}`} onClick={seller.online ? () => setSelectedSeller(seller) : undefined}>
-                      <img src={seller.image || '/default-avatar.png'} alt={seller.name} className="w-12 h-12 rounded-full mr-4" />
+                      <Image src={seller.image || '/default-avatar.png'} alt={seller.name} width={48} height={48} className="w-12 h-12 rounded-full mr-4" />
                       <div className="flex-1">
                           <p className="font-bold text-gray-900">{seller.name}</p>
                           <p className="text-sm text-gray-500">{seller.email}</p>
