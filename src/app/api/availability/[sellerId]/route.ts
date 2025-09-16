@@ -4,10 +4,10 @@ import { supabase } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sellerId: string } }
+  { params }: { params: Promise<{ sellerId: string }> }
 ) {
   try {
-    const { sellerId } = params
+    const { sellerId } = await params
 
     // Get seller email
     const { data: seller, error } = await supabase

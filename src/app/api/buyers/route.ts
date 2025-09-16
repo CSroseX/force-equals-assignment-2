@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ message: 'Buyer saved', buyer: data })
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

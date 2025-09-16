@@ -1,4 +1,5 @@
-import NextAuth from 'next-auth'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import NextAuth from 'next-auth/next'
 import GoogleProvider from 'next-auth/providers/google'
 
 const handler = NextAuth({
@@ -17,14 +18,14 @@ const handler = NextAuth({
     signIn: '/auth/signin',
   },
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account }: any) {
       if (account) {
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
       }
       return token
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       session.accessToken = token.accessToken
       session.refreshToken = token.refreshToken
       return session

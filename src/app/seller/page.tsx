@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useSession, signIn, signOut } from 'next-auth/react'
 import { useEffect, useState } from 'react'
@@ -85,8 +86,8 @@ export default function SellerDashboard() {
 
 
   // Fix TypeScript errors for session properties
-  const refreshToken = session?.refreshToken
-  const userId = session?.user?.id
+  const refreshToken = (session as any)?.refreshToken
+  const userId = (session?.user as any)?.id
 
   // Effect for saving seller data
   useEffect(() => {
